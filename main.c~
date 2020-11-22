@@ -1,0 +1,131 @@
+#include <stdio.h>
+#include <unistd.h>
+#include <stdlib.h>
+#include <fcntl.h>
+#include <dirent.h>
+#include <sys/types.h>
+#include <string.h>
+
+#define FILENAMEMAXLENGTH 60
+#define DIRTAG 4
+#define FILETAG 8
+
+struct dirdesc {
+	unsigned short iddir;
+	unsigned char* dirname;
+	unsigned char isdir;
+	unsigned short filecount;
+	unsigned short* fileids;
+};
+struct filedata {
+	unsigned short fileid;
+	unsigned short filesize;
+	unsigned char* data;
+};
+struct filetree {
+	struct dirdesc data;
+	struct filetree* parent;
+	struct filetree* children;
+};
+
+void printfiletree(struct filetree node) {
+	printf("%s\n", node.data.dirname);
+	for (int i = 0; i < node.data.filecount; i++) {
+		printfiletree(node.children[i]);
+	}
+}
+
+void scandir2(char* dirname, int deep, struct filetree *tree) {
+	DIR *dir;
+	struct dirent *ent;
+	int files = 0;
+	int index = 0;
+	char subpath[FILENAMEMAXLENGTH];
+	for (int i = 0; i < deep; i++) printf("-");
+	printf("%s\n", dirname);
+	if ((dir = opendir(dirname)) == NULL) {
+		printf("/unable to open\n");
+		return;
+	}
+	while ((ent = readdir(dir)) != NULL) {
+		if (ent->d_name[0] != '.') { 
+			files++;
+		}
+	}
+	tree->data.filecount = files;
+	tree->children = (struct filetree*)malloc(sizeof(struct filetree) * files);
+	dir = opendir(dirname);
+	ent = NULL;
+	printf("files: %d\n", files);
+	while ((ent = readdir(dir)) != NULL) {
+		subpath[0] = '\0';
+		strcat(subpath, dirname);
+		strcat(subpath, "/");
+		if (ent->d_type == DIRTAG) {
+			if (strcmp(ent->d_name, ".") && (strcmp(ent->d_name, ".."))) {
+				// if current dir is not . ..
+				struct filetree item;
+				item.data.iddir = 0;
+				//item.data.dirname = (char*)malloc(FILENAMEMAXLENGTH);
+				item.data.dirname = subpath;
+				item.data.isdir = 1;
+				item.data.fileids = NULL;
+				item.data.filecount = 0;
+
+				item.parent = tree;
+				item.children = NULL;
+				tree->children[index] = item;
+				index++;
+
+				strcat(subpath, ent->d_name);
+				scandir2(subpath, ++deep, &item);
+			}
+		}
+		else { 
+			strcat(subpath, ent->d_name);
+			printf("+ new file : %s\n", subpath);
+			struct filetree item;
+			item.children = NULL;
+			//item.data.dirname = (char*)malloc(FILENAMEMAXLENGTH);
+			item.data.dirname = subpath;
+			item.data.fileids = NULL;
+			item.data.filecount = 0;
+			item.data.iddir = 0;
+			item.data.isdir = 0;
+			item.parent = tree;
+			item.children = NULL;
+			tree->children[index] = item;
+			index++;
+		}
+	}
+	return;
+}
+
+
+int main(int argc, char** argv) {
+	if (argc <= 1) {
+		printf("enter arg\n");
+		return -1;
+	}
+	if (argc > 3) {
+		printf("too many args\n");
+		return -2;
+	}
+	printf("Archivator TATAR...\n");
+	char* path;
+	path = argv[1];
+	struct filetree root;
+	root.children = NULL;
+	root.parent = NULL;
+	root.data.dirname = path;
+	root.data.iddir = 0;
+	root.data.isdir = 1;
+	root.data.filecount = 0;
+	root.data.fileids = NULL;
+
+	scandir2(path, 0, &root);
+	printf("_______TATAR_______\n");
+	printf("_______PRINT_______\n");
+	printfiletree(root);
+	return 0;
+}
